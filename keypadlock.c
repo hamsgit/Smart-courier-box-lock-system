@@ -92,3 +92,4 @@ default:
 state = 0;  // In case of unexpected behavior, reset the sequence 
 } 
 }
+
