@@ -18,3 +18,5 @@ The Password-Based Smart Lock System enhances security by integrating:
   Real-Time Alerts: Sends notifications for failed login attempts or suspicious behavior.
   Remote Monitoring: A web-based control panel allows users to monitor and manage access remotely.
 
+In western countries we can see there will be parcel collection boxes placed on out side, where parcels from delivery agents or postes will be put in and the owner will collect them later. However this has a risk of goods being stolen by anyone. So this lock system can also be a product to give security for such collection boxes. Our system is designed to be accessed by two type of users, master or guest, and there will be a feature to get alert when the box is broken or opened without entering password.
+The lock will be locked after a certain time interval and the owner can observe the lock status and updates of whenever the lock is opened, and alert notifications through a website.
