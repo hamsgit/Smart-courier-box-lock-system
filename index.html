@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlock History Monitor</title>
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.2/firebase-app.js";
+        import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/9.1.2/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAs_-pO2y8CDcS2mjraMarO-lxgBDNDu80",
+            databaseURL: "https://embedded-5f992-default-rtdb.firebaseio.com/"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        // Keep track of previous inputs to detect changes
+        let previousInputs = {
+            input1: false,
+            input2: false,
+            input3: false
+        };
+        
+        // Array to store unlock history
+        let unlockHistory = [];
+
+        // Function to update sensor data and detect unlock events
+        function updateSensorData(snapshot) {
+            const data = snapshot.val();
+            if (!data) return;
+            
+            // Update the UI
+            document.getElementById("objectCount").textContent = "Object Count: " + data.objectCount;
+            document.getElementById("objectPresent").textContent = "Object Present: " + (data.objectPresent ? "Yes" : "No");
+            document.getElementById("lastUpdate").textContent = "Last Update: " + data.lastUpdate;
+            document.getElementById("input1").textContent = "Master Unlock: " + (data.input1 ? "Active" : "Inactive");
+            document.getElementById("input2").textContent = "Guest Unlock: " + (data.input2 ? "Active" : "Inactive");
+            document.getElementById("input3").textContent = "Unauthorized Unlock: " + (data.input3 ? "Active ⚠️" : "Inactive");
+            
+            // Update lock status based on input3
+            updateLockStatus(data);
+
+            // Check if any input has changed to true (unlock event)
+            const unlockDetected = 
+                (data.input1 && !previousInputs.input1) || 
+                (data.input2 && !previousInputs.input2) || 
+                (data.input3 && !previousInputs.input3);
+                
+            if (unlockDetected) {
+                // Determine user type
+                let userType = "";
+                if (data.input1) {
+                    userType = "Master User";
+                } else if (data.input2) {
+                    userType = "Guest User";
+                } else if (data.input3) {
+                    userType = "⚠️ Unauthorized Access";
+                }
+                
+                // Parse the date and time from lastUpdate
+                const lastUpdateParts = data.lastUpdate.split(" ");
+                const date = lastUpdateParts[0];
+                const time = lastUpdateParts[1];
+                
+                // Create unlock event record
+                const unlockEvent = {
+                    date: date,
+                    time: time,
+                    userType: userType
+                };
+                
+                // Add to local history and update UI
+                unlockHistory.unshift(unlockEvent); // Add to beginning of array
+                updateUnlockHistoryUI();
+                
+                // Optionally save to Firebase (if you want to track history there too)
+                const historyRef = ref(db, "unlockHistory");
+                const newEntryRef = push(historyRef);
+                set(newEntryRef, unlockEvent);
+            }
+            
+            // Update previous inputs
+            previousInputs = {
+                input1: data.input1,
+                input2: data.input2,
+                input3: data.input3
+            };
+        }
+
+        // Lock status tracking
+        let lockStatus = "Locked"; // default lock status
+
+        // Function to update lock status
+        function updateLockStatus(data) {
+            // If input3 is true, lock is unlocked
+            if (data.input3) {
+                lockStatus = "Unlocked";
+            } else {
+                lockStatus = "Locked";
+            }
+
+            // Update UI
+            document.getElementById("lockStatus").textContent = "Lock Status: " + lockStatus;
+        }
+
+        // Function to update the unlock history table
+        function updateUnlockHistoryUI() {
+            const table = document.getElementById("historyTable");
+            
+            // Clear previous history except header
+            while (table.rows.length > 1) {
+                table.deleteRow(1);
+            }
+            
+            // Display up to 15 most recent entries
+            const entriesToShow = unlockHistory.slice(0, 15);
+            
+            if (entriesToShow.length > 0) {
+                entriesToShow.forEach(entry => {
+                    const row = table.insertRow();
+                    row.insertCell(0).textContent = entry.date;
+                    row.insertCell(1).textContent = entry.time;
+                    
+                    const userTypeCell = row.insertCell(2);
+                    userTypeCell.textContent = entry.userType;
+                    
+                    // Add alert styling for unauthorized access
+                    if (entry.userType.includes("Unauthorized")) {
+                        userTypeCell.style.color = "red";
+                        userTypeCell.style.fontWeight = "bold";
+                    }
+                });
+            } else {
+                const row = table.insertRow();
+                const cell = row.insertCell(0);
+                cell.colSpan = 3;
+                cell.textContent = "No unlock history available yet";
+                cell.style.textAlign = "center";
+            }
+        }
+
+        // Function to fetch existing history data
+        function fetchUnlockHistory() {
+            const historyRef = ref(db, "unlockHistory");
+            onValue(historyRef, (snapshot) => {
+                const historyData = snapshot.val();
+                
+                if (historyData) {
+                    // Convert object to array
+                    unlockHistory = Object.entries(historyData).map(([key, value]) => ({
+                        key,
+                        ...value
+                    }));
+                    
+                    // Sort by date and time (newest first)
+                    unlockHistory.sort((a, b) => {
+                        const dateA = new Date(`${a.date} ${a.time}`);
+                        const dateB = new Date(`${b.date} ${b.time}`);
+                        return dateB - dateA;
+                    });
+                    
+                    // Update UI
+                    updateUnlockHistoryUI();
+                }
+            });
+        }
+
+        // Initialize app
+        window.onload = function() {
+            // Start monitoring sensor data
+            const sensorRef = ref(db, "sensor");
+            onValue(sensorRef, updateSensorData);
+            
+            // Fetch existing unlock history
+            fetchUnlockHistory();
+        };
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #89f3ff;
+            color: #333;
+        }
+
+        h1, h2 {
+            text-align: center;
+            color: #0a10c5;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #statusPanel {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        #statusPanel h2 {
+            grid-column: span 2;
+            margin-top: 0;
+        }
+
+        .status-item {
+            padding: 10px;
+            background-color: #f0f7ff;
+            border-radius: 5px;
+        }
+
+        #historyPanel {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #historyTable {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        #historyTable th, #historyTable td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        #historyTable th {
+            background-color: #01063f;
+            color: #fff;
+        }
+
+        #historyTable tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        #historyTable tr:hover {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Lock Monitoring System</h1>
+        
+        <div id="statusPanel">
+            <h2>Current Status</h2>
+            <div class="status-grid">
+                <div class="status-item" id="objectCount">Object Count: Loading...</div>
+                <div class="status-item" id="objectPresent">Object Present: Loading...</div>
+                <div class="status-item" id="lastUpdate">Last Update: Loading...</div>
+                <div class="status-item" id="input1">Master Unlock: Loading...</div>
+                <div class="status-item" id="input2">Guest Unlock: Loading...</div>
+                <div class="status-item" id="input3">Unauthorized Unlock: Loading...</div>
+            </div>
+        </div>
+
+        <div>
+            <button id="lockStatusButton">Check Lock Status</button>
+            <p id="lockStatus">Lock Status: Loading...</p>
+        </div>
+        
+        <div id="historyPanel">
+            <h2>Unlock History (Last 15 Events)</h2>
+            <table id="historyTable">
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>User Type</th>
+                </tr>
+                <tr>
+                    <td colspan="3" style="text-align: center;">Loading history...</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
